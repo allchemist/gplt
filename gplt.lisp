@@ -1,6 +1,6 @@
-(defpackage :cl-gnuplot (:use :cl))
+(defpackage :gplt (:use :cl))
 
-(in-package :cl-gnuplot)
+(in-package :gplt)
 
 ;; open pipe to gnuplot
 ;; returnes pipe descriptor and process id
@@ -10,8 +10,9 @@
 	 (sb-ext:run-program "gnuplot" '("-persist")
 			     :wait nil
 			     :search t
-			     :input :stream)))
-    (values (sb-ext:process-input proc) proc)))
+			     :input :stream
+			     :output :stream)))
+    (values (sb-ext:process-input proc) (sb-ext:process-output proc) proc)))
 
 ;; functions to convert lisp clauses into infix form
 
@@ -52,7 +53,7 @@
   (format fd "unset ~A~%" (string-downcase (string param))))
 
 ;; simple gnuplot call
-
+#|
 (defun gplt (&key func file (params "with lines") (sets '((term "x11"))) (unsets '(key)))
   (let ((fd (open-pipe)))
     (progn
@@ -76,3 +77,56 @@
 	     (let ((func-str (infix-to-string (parse-prefix func))))
 	       (format fd (if (find #\y func-str) "splot ~A ~A~%" "plot ~A ~A~%") func-str params))))
        (close fd))))
+|#
+
+;; interactive mode
+
+(defvar *gnuplot-input*)
+(defvar *gnuplot-output*)
+(defvar *gnuplot-process*)
+
+(defun gplt-start ()
+  (multiple-value-setq (*gnuplot-input* *gnuplot-output* *gnuplot-process*)
+    (open-pipe))
+  (when (sb-ext:process-alive-p *gnuplot-process*) T))
+
+(defun convert-clause (clause)
+  (case (first clause)
+    (range (format nil " [~A:~A] " (second clause) (third clause)))
+    (enum (format nil " ~A,~A " (second clause) (third clause)))))
+
+(defun parse-cmd (cmd)
+  (mapcar #'(lambda (c) (if (listp c) (convert-clause c) c)) cmd))
+
+(defun gplt-exec (cmd)
+  (let ((clause
+	 (case (first cmd)
+	   ((or plot splot)
+	      (append (list (first cmd)
+			    (if (stringp (second cmd))
+				(second cmd)
+				(parse-prefix (second cmd))))
+		      (parse-cmd (cddr cmd))))
+	   (t (parse-cmd cmd)))))
+    (format *gnuplot-input* "~A"
+	    (string-trim "()" (string-downcase (format nil "~A~%" clause))))
+    ))
+;    (format *query-io* "~A~%" (read-line *gnuplot-output*))))
+      
+(defun gplt-display ()
+  (close *gnuplot-input*)
+  (close *gnuplot-output*))
+
+(defun gplt-stop ()
+  (when (sb-ext:process-alive-p *gnuplot-process*)
+    (sb-ext:process-kill *gnuplot-process* 9)))
+
+(defun gplt-restart ()
+  (gplt-stop)
+  (gplt-start))
+
+(defun sharp-G (stream &rest ignore)
+  (declare (ignore ignore))
+  (gplt-exec (read stream t nil t)))
+
+(set-dispatch-macro-character #\# #\G #'sharp-G)
