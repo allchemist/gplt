@@ -5,9 +5,13 @@
 
 (defsystem gplt
   :name "gplt"
-  :description "Gnuplot interactive interface"
+  :description "Gnuplot interface"
   :author "Khokhlov Ivan"
   :licence "BSD"
   :depends-on ()
+  :serial t
   :components
-  ((:file "gplt")))
+  ((:file "package")
+   (:file "infix")
+   (:file "interact")
+   (:file "packet")))
